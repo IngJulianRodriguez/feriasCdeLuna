@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registrar Venta</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .categoria-btn {
+      margin: 5px;
+    }
+    .producto-btn {
+      margin: 5px;
+    }
+    .producto-seleccionado {
+      border: 2px solid #0d6efd;
+      background-color: #e7f1ff;
+    }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <h1 class="mb-4 text-center">Registrar Venta</h1>
+
+    <div class="mb-4">
+      <label for="categoriaSelect" class="form-label">Selecciona una categoría:</label>
+      <div id="categorias" class="d-flex flex-wrap"></div>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label">Selecciona un producto:</label>
+      <div id="productos" class="d-flex flex-wrap"></div>
+    </div>
+
+    <div id="formulario" style="display: none">
+      <h5 id="productoSeleccionado" class="fw-bold"></h5>
+      <p id="precioProducto"></p>
+      <div class="mb-3">
+        <label class="form-label">Cantidad</label>
+        <input type="number" id="cantidad" class="form-control" value="1">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Descuento</label>
+        <input type="number" id="descuento" class="form-control" value="0">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Método de Pago</label>
+        <select id="metodoPago" class="form-select">
+          <option>Efectivo</option>
+          <option>QR Bancolombia</option>
+          <option>Nequi</option>
+          <option>Datáfono Tarjeta Nacional</option>
+          <option>Datáfono Tarjeta Extranjera</option>
+        </select>
+      </div>
+      <button id="registrarBtn" class="btn btn-primary">Registrar Venta</button>
+    </div>
+
+    <div id="mensaje" class="mt-4"></div>
+  </div>
+
+  <script>
+    const getUrl = 'https://pfvrv4wticuksfx7rqwztktzuq0judef.lambda-url.us-east-1.on.aws/';
+    const postUrl = 'https://qixwv6bgxhaqrhtsq2uasegyvi0ottpw.lambda-url.us-east-1.on.aws/';
+    let productos = [];
+    let productoSeleccionado = null;
+
+    fetch(getUrl)
+      .then(res => res.json())
+      .then(data => {
+        productos = data;
+        agruparPorCategoria();
+      })
+      .catch(() => mostrarMensaje('❌ Error al cargar productos', 'danger'));
+
+    function agruparPorCategoria() {
+      const categorias = {};
+      productos.forEach(p => {
+        const categoria = p.nombre.split(' ')[0];
+        if (!categorias[categoria]) categorias[categoria] = [];
+        categorias[categoria].push(p);
+      });
+
+      const categoriasDiv = document.getElementById('categorias');
+      categoriasDiv.innerHTML = '';
+      Object.keys(categorias).sort().forEach(cat => {
+        const btn = document.createElement('button');
+        btn.textContent = cat;
+        btn.className = 'btn btn-outline-primary categoria-btn';
+        btn.onclick = () => mostrarProductos(categorias[cat]);
+        categoriasDiv.appendChild(btn);
+      });
+    }
+
+    function mostrarProductos(lista) {
+      const productosDiv = document.getElementById('productos');
+      productosDiv.innerHTML = '';
+      lista.forEach(p => {
+        const btn = document.createElement('button');
+        btn.textContent = p.nombre;
+        btn.className = 'btn btn-outline-secondary producto-btn';
+        btn.onclick = () => seleccionarProducto(p, btn);
+        productosDiv.appendChild(btn);
+      });
+    }
+
+    function seleccionarProducto(producto, boton) {
+      productoSeleccionado = producto;
+      document.querySelectorAll('.producto-btn').forEach(btn => btn.classList.remove('producto-seleccionado'));
+      boton.classList.add('producto-seleccionado');
+      document.getElementById('formulario').style.display = 'block';
+      document.getElementById('productoSeleccionado').textContent = producto.nombre;
+      document.getElementById('precioProducto').textContent = `Precio: $${formatearPrecio(producto.precio)}`;
+    }
+
+    document.getElementById('registrarBtn').addEventListener('click', () => {
+      if (!productoSeleccionado) return;
+      const cantidad = parseInt(document.getElementById('cantidad').value) || 1;
+      const descuento = parseFloat(document.getElementById('descuento').value) || 0;
+      const metodoPago = document.getElementById('metodoPago').value;
+
+      const datos = {
+        productoId: productoSeleccionado.productoId,
+        nombre: productoSeleccionado.nombre,
+        precio: parseFloat(productoSeleccionado.precio),
+        cantidad,
+        descuento,
+        metodoPago
+      };
+
+      fetch(postUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(datos)
+      })
+      .then(res => res.json())
+      .then(respuesta => {
+        if (respuesta.ventaId) {
+          mostrarMensaje('✅ Venta registrada correctamente', 'success');
+          document.getElementById('formulario').reset?.();
+          document.getElementById('formulario').style.display = 'none';
+          document.querySelectorAll('.producto-btn').forEach(btn => btn.classList.remove('producto-seleccionado'));
+        } else {
+          mostrarMensaje('❌ Error al registrar venta', 'danger');
+        }
+      })
+      .catch(() => mostrarMensaje('❌ Error de red al registrar venta', 'danger'));
+    });
+
+    function formatearPrecio(valor) {
+      return Number(valor).toLocaleString('es-CO', { minimumFractionDigits: 0 });
+    }
+
+    function mostrarMensaje(texto, tipo) {
+      const div = document.getElementById('mensaje');
+      div.innerHTML = `<div class="alert alert-${tipo}" role="alert">${texto}</div>`;
+    }
+  </script>
+</body>
+</html>
