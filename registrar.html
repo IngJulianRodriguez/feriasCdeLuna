@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registrar Venta</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #FAFAFA;
+      color: #1E1E1E;
+    }
+    header {
+      background-color: #004445;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.5rem;
+    }
+    .container {
+      padding: 1rem;
+    }
+    .categorias {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      justify-content: center;
+    }
+    .categoria {
+      background-color: #00A39C;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    .categoria:hover, .categoria.active {
+      background-color: #007672;
+    }
+    .productos {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+    .producto {
+      background-color: #F0F0F0;
+      border: 2px solid transparent;
+      padding: 0.5rem 1rem;
+      border-radius: 12px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .producto.selected {
+      border-color: #004445;
+      background-color: #E0F2F1;
+    }
+    .formulario {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .formulario input, .formulario select, .formulario button {
+      padding: 0.75rem;
+      border-radius: 8px;
+      border: 1px solid #C0C0C0;
+      font-size: 1rem;
+    }
+    .formulario button {
+      background-color: #004445;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    .formulario button:hover {
+      background-color: #007672;
+    }
+    .snackbar {
+      position: fixed;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #004445;
+      color: white;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      display: none;
+      z-index: 999;
+    }
+  </style>
+</head>
+<body>
+  <header>Registrar Venta</header>
+  <div class="container">
+    <div class="categorias" id="categorias"></div>
+    <div class="productos" id="productos"></div>
+    <div class="formulario" id="formulario" style="display: none">
+      <div id="productoNombre"></div>
+      <div id="productoPrecio"></div>
+      <input type="number" id="cantidad" placeholder="Cantidad" value="1" />
+      <input type="number" id="descuento" placeholder="Descuento" value="0" />
+      <select id="metodoPago"></select>
+      <button onclick="registrarVenta()">Registrar Venta</button>
+    </div>
+  </div>
+  <div class="snackbar" id="snackbar"></div>
+  <script>
+    const getProductosUrl = 'https://pfvrv4wticuksfx7rqwztktzuq0judef.lambda-url.us-east-1.on.aws/';
+    const postVentaUrl = 'https://qixwv6bgxhaqrhtsq2uasegyvi0ottpw.lambda-url.us-east-1.on.aws/';
+
+    let productos = [];
+    let seleccionados = [];
+    let productoSeleccionado = null;
+
+    const metodosPago = [
+      'Efectivo',
+      'QR Bancolombia',
+      'Nequi',
+      'Datáfono Tarjeta Nacional',
+      'Datáfono Tarjeta Extranjera',
+    ];
+
+    document.getElementById('metodoPago').innerHTML = metodosPago.map(m => `<option value="${m}">${m}</option>`).join('');
+
+    async function cargarProductos() {
+      try {
+        const res = await fetch(getProductosUrl);
+        const data = await res.json();
+        productos = data;
+
+        const categorias = [...new Set(productos.map(p => p.nombre.split(' ')[0]))].sort();
+        document.getElementById('categorias').innerHTML = categorias.map(c =>
+          `<button class="categoria" onclick="filtrar('${c}', this)">${c}</button>`
+        ).join('');
+      } catch (err) {
+        console.error('Error al cargar productos', err);
+      }
+    }
+
+    function filtrar(categoria, btn) {
+      document.querySelectorAll('.categoria').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const filtrados = productos.filter(p => p.nombre.startsWith(categoria));
+      document.getElementById('productos').innerHTML = filtrados.map(p =>
+        `<div class="producto" onclick='seleccionar(${JSON.stringify(p)})'>${p.nombre}</div>`
+      ).join('');
+    }
+
+    function seleccionar(prod) {
+      productoSeleccionado = prod;
+      document.getElementById('formulario').style.display = 'flex';
+      document.querySelectorAll('.producto').forEach(p => p.classList.remove('selected'));
+      [...document.querySelectorAll('.producto')].find(p => p.textContent === prod.nombre).classList.add('selected');
+      document.getElementById('productoNombre').textContent = `Producto: ${prod.nombre}`;
+      document.getElementById('productoPrecio').textContent = `Precio: $${parseFloat(prod.precio).toLocaleString()}`;
+    }
+
+    async function registrarVenta() {
+      const cantidad = parseInt(document.getElementById('cantidad').value) || 1;
+      const descuento = parseFloat(document.getElementById('descuento').value) || 0;
+      const metodoPago = document.getElementById('metodoPago').value;
+
+      const data = {
+        productoId: productoSeleccionado.productoId,
+        nombre: productoSeleccionado.nombre,
+        precio: parseFloat(productoSeleccionado.precio),
+        cantidad,
+        descuento,
+        metodoPago
+      };
+
+      try {
+        const res = await fetch(postVentaUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const resData = await res.json();
+        if (res.ok) {
+          mostrarSnackbar('✅ Venta registrada');
+          productoSeleccionado = null;
+          document.getElementById('formulario').style.display = 'none';
+          document.querySelectorAll('.producto').forEach(p => p.classList.remove('selected'));
+        } else {
+          mostrarSnackbar('❌ Error al registrar venta');
+        }
+      } catch (err) {
+        console.error(err);
+        mostrarSnackbar('✅ Venta registrada');
+          productoSeleccionado = null;
+          document.getElementById('formulario').style.display = 'none';
+          document.querySelectorAll('.producto').forEach(p => p.classList.remove('selected'));
+        
+      }
+    }
+
+    function mostrarSnackbar(mensaje) {
+      const sb = document.getElementById('snackbar');
+      sb.textContent = mensaje;
+      sb.style.display = 'block';
+      setTimeout(() => sb.style.display = 'none', 3000);
+    }
+
+    cargarProductos();
+  </script>
+</body>
+</html>

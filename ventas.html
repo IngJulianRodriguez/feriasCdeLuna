@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ver Ventas</title>
+  <style>
+    :root {
+      --color-primario: #004445;
+      --color-claro: #f5f5f5;
+      --color-texto: #222;
+      --color-acento: #007f7f;
+      --color-verde: #2e7d32;
+      --color-naranja: #f57c00;
+      --color-error: #c62828;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background-color: var(--color-claro);
+      color: var(--color-texto);
+      padding: 1rem;
+    }
+
+    h1 {
+      text-align: center;
+      color: var(--color-primario);
+      margin-bottom: 1rem;
+    }
+
+    .fecha-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .fecha-label {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #37474f;
+    }
+
+    button {
+      background-color: var(--color-primario);
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #006b6b;
+    }
+
+    .venta {
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      padding: 1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+    }
+
+    .venta-icono {
+      font-size: 1.5rem;
+      color: var(--color-primario);
+      margin-right: 1rem;
+    }
+
+    .venta-detalles {
+      flex-grow: 1;
+    }
+
+    .venta-total {
+      font-weight: bold;
+      color: var(--color-verde);
+      font-size: 1rem;
+    }
+
+    .venta-descuento {
+      color: var(--color-naranja);
+    }
+
+    .error {
+      color: var(--color-error);
+      text-align: center;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>🗓️ Ventas por Fecha</h1>
+
+  <div class="fecha-bar">
+    <div class="fecha-label" id="fecha-label"></div>
+    <button onclick="seleccionarFecha()">📅 Seleccionar Fecha</button>
+  </div>
+
+  <div id="ventas"></div>
+  <div id="mensaje" class="error"></div>
+
+  <script>
+    let fechaSeleccionada = new Date();
+
+    function formatearFecha(fecha) {
+      const d = fecha.getDate().toString().padStart(2, '0');
+      const m = (fecha.getMonth() + 1).toString().padStart(2, '0');
+      return `${d}-${m}`;
+    }
+
+    function formatearHora(fechaStr) {
+      const partes = fechaStr.split('T');
+      if (partes.length < 2) return '';
+      const horaPartes = partes[1].split(':');
+      let hora = parseInt(horaPartes[0]);
+      const minuto = horaPartes[1].padStart(2, '0');
+      let periodo = 'am';
+      if (hora >= 12) {
+        periodo = 'pm';
+        if (hora > 12) hora -= 12;
+      } else if (hora === 0) {
+        hora = 12;
+      }
+      return `${hora.toString().padStart(2, '0')}:${minuto} ${periodo}`;
+    }
+
+    async function cargarVentas() {
+      document.getElementById('mensaje').innerText = '';
+      const label = document.getElementById('fecha-label');
+      label.innerText = formatearFecha(fechaSeleccionada);
+      const iso = fechaSeleccionada.toISOString().split('T')[0];
+      const contenedor = document.getElementById('ventas');
+      contenedor.innerHTML = '<p>Cargando...</p>';
+
+      try {
+        const res = await fetch(`https://cpufhv6jzht5uwpbkdr4ldxqym0mhmli.lambda-url.us-east-1.on.aws/?fecha=${iso}`);
+        if (!res.ok) throw new Error('Error al cargar ventas');
+        let datos = await res.json();
+        datos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+        contenedor.innerHTML = '';
+        for (const venta of datos) {
+          const descuento = parseFloat(venta.descuento || 0);
+          const hora = formatearHora(venta.fecha || '');
+          contenedor.innerHTML += `
+            <div class="venta">
+              <div class="venta-icono">🛒</div>
+              <div class="venta-detalles">
+                <div><strong>${venta.nombre}</strong></div>
+                <div>Cantidad: ${venta.cantidad} | Hora: ${hora}</div>
+                ${venta.metodoPago ? `<div>Pago: ${venta.metodoPago}</div>` : ''}
+                ${descuento > 0 ? `<div class="venta-descuento">Descuento: \$${descuento.toFixed(0)}</div>` : ''}
+              </div>
+              <div class="venta-total">
+                \$${venta.total}
+              </div>
+            </div>
+          `;
+        }
+      } catch (e) {
+        document.getElementById('mensaje').innerText = `⚠️ ${e.message}`;
+        contenedor.innerHTML = '';
+      }
+    }
+
+    function seleccionarFecha() {
+      const input = document.createElement('input');
+      input.type = 'date';
+      input.max = new Date().toISOString().split('T')[0];
+      input.style.display = 'none';
+      input.onchange = (e) => {
+        const nuevaFecha = new Date(e.target.value);
+        if (!isNaN(nuevaFecha)) {
+          fechaSeleccionada = nuevaFecha;
+          cargarVentas();
+        }
+      };
+      document.body.appendChild(input);
+      input.click();
+      document.body.removeChild(input);
+    }
+
+    cargarVentas();
+  </script>
+</body>
+</html>
